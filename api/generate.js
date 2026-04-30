@@ -9,33 +9,37 @@ export default async function handler(req, res) {
   const { assetDesc, prompt } = req.body;
   if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
 
-  const systemPrompt = `You are FrameAI, a professional video editor AI assistant. Produce a clear VIDEO EDIT PLAN with:
+  const fullPrompt = `You are FrameAI, a professional video editor AI assistant. Produce a clear VIDEO EDIT PLAN with:
 1. PROJECT OVERVIEW
 2. SCENE SEQUENCE (asset, timestamps, transitions, effects)
 3. COLOUR & STYLE (grade, LUT, adjustments)
 4. AUDIO PLAN (music, sound design, voiceover)
 5. EXPORT SETTINGS (resolution, fps, codec)
-Be specific and practical.`;
+
+Assets uploaded:
+${assetDesc || '(none)'}
+
+Edit instruction:
+${prompt}`;
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1200,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: `Assets:\n${assetDesc || '(none)'}\n\nEdit instruction:\n${prompt}` }]
-      })
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }]
+        })
+      }
+    );
+
     const data = await response.json();
     if (data.error) return res.status(500).json({ error: data.error.message });
-    const text = data.content?.map(b => b.text || '').join('') || 'No response.';
+
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response.';
     return res.status(200).json({ result: text });
+
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
