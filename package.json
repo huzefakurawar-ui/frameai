@@ -1,0 +1,9 @@
+{
+  "name": "frameai-v2",
+  "version": "2.0.0",
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "busboy": "^1.6.0"
+  }
+}
