@@ -32,7 +32,7 @@ ${prompt}`;
         'X-Title': 'FrameAI'
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout:free',
+        model: 'openrouter/auto',
         messages: [{ role: 'user', content: fullPrompt }]
       })
     });
