@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FrameAI — AI Video Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg2: #f5f5f3;
+      --bg3: #ebebea;
+      --text: #1a1a18;
+      --muted: #6b6b67;
+      --hint: #9e9e9a;
+      --border: rgba(0,0,0,0.10);
+      --border2: rgba(0,0,0,0.18);
+      --accent: #185FA5;
+      --accent-light: #E6F1FB;
+      --accent-text: #0C447C;
+      --success: #3B6D11;
+      --success-bg: #EAF3DE;
+      --danger: #A32D2D;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1a18; --bg2: #242422; --bg3: #2e2e2c;
+        --text: #f0f0ec; --muted: #a0a09c; --hint: #6e6e6a;
+        --border: rgba(255,255,255,0.09); --border2: rgba(255,255,255,0.16);
+        --accent: #378ADD; --accent-light: #0d2540; --accent-text: #85B7EB;
+        --success: #97C459; --success-bg: #1a2d0a; --danger: #F09595;
+      }
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg3);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    .app {
+      width: 100%; max-width: 920px;
+      background: var(--bg);
+      border-radius: var(--radius-lg);
+      border: 0.5px solid var(--border2);
+      overflow: hidden;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.08);
+    }
+
+    /* HEADER */
+    .header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 1rem 1.25rem 0.875rem;
+      border-bottom: 0.5px solid var(--border);
+    }
+    .logo { font-family: 'Space Mono', monospace; font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: -0.5px; }
+    .logo span { color: var(--text); }
+    .badge { font-size: 11px; padding: 2px 9px; background: var(--accent-light); color: var(--accent-text); border-radius: 20px; font-weight: 500; }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #63c74d; }
+    .status-txt { font-size: 12px; color: var(--muted); }
+
+    /* WORKSPACE */
+    .workspace { display: grid; grid-template-columns: 220px 1fr; }
+
+    /* SIDEBAR */
+    .sidebar { border-right: 0.5px solid var(--border); display: flex; flex-direction: column; }
+    .sidebar-section { padding: 0.875rem 1rem; border-bottom: 0.5px solid var(--border); }
+    .sidebar-label { font-size: 10px; font-weight: 500; color: var(--hint); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
+
+    .upload-zone {
+      border: 1px dashed var(--border2); border-radius: var(--radius-md);
+      padding: 18px 10px; text-align: center; cursor: pointer; transition: all 0.15s;
+    }
+    .upload-zone:hover, .upload-zone.drag-over { border-color: var(--accent); background: var(--accent-light); }
+    .upload-zone .icon { font-size: 22px; margin-bottom: 6px; }
+    .upload-zone p { font-size: 11px; color: var(--muted); line-height: 1.5; }
+    .upload-zone strong { color: var(--accent); }
+    #file-input { display: none; }
+
+    .asset-list { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+    .asset-item {
+      display: flex; align-items: center; gap: 7px; padding: 5px 7px;
+      border-radius: var(--radius-md); border: 0.5px solid var(--border);
+      background: var(--bg); cursor: pointer; transition: all 0.12s;
+    }
+    .asset-item:hover { border-color: var(--border2); background: var(--bg2); }
+    .asset-item.active { border-color: var(--accent); background: var(--accent-light); }
+    .asset-thumb { width: 34px; height: 26px; border-radius: 4px; background: var(--bg3); display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; overflow: hidden; }
+    .asset-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .asset-info { flex: 1; min-width: 0; }
+    .asset-name { font-size: 11px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .asset-meta { font-size: 10px; color: var(--hint); }
+    .asset-remove { font-size: 12px; color: var(--hint); cursor: pointer; padding: 2px; line-height: 1; flex-shrink: 0; }
+    .asset-remove:hover { color: var(--danger); }
+    .empty-assets { font-size: 12px; color: var(--hint); text-align: center; padding: 10px 0; }
+
+    .scene-list { display: flex; flex-direction: column; }
+    .scene-row { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 0.5px solid var(--border); font-size: 11px; }
+    .scene-num { font-size: 10px; color: var(--hint); min-width: 14px; }
+
+    /* MAIN */
+    .main { display: flex; flex-direction: column; }
+
+    .preview-area {
+      background: #0a0a0a; display: flex; align-items: center; justify-content: center;
+      min-height: 220px; position: relative; overflow: hidden;
+    }
+    .preview-placeholder { text-align: center; }
+    .preview-placeholder .big-icon { font-size: 34px; opacity: 0.25; margin-bottom: 8px; }
+    .preview-placeholder p { font-size: 12px; color: rgba(255,255,255,0.25); }
+    .preview-video { width: 100%; max-height: 240px; object-fit: contain; display: none; }
+    .preview-image { max-height: 220px; max-width: 100%; display: none; border-radius: 6px; }
+
+    .gen-overlay {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.88);
+      display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    }
+    .gen-overlay.active { display: flex; }
+    .gen-title { font-size: 14px; color: #fff; font-weight: 500; }
+    .gen-sub { font-size: 12px; color: rgba(255,255,255,0.45); }
+    .prog-wrap { width: 200px; height: 3px; background: rgba(255,255,255,0.12); border-radius: 2px; overflow: hidden; }
+    .prog-fill { height: 100%; background: #378ADD; border-radius: 2px; width: 0%; transition: width 0.35s ease; }
+
+    .timeline-strip {
+      padding: 8px 12px; background: var(--bg2);
+      border-top: 0.5px solid var(--border); border-bottom: 0.5px solid var(--border);
+      display: flex; gap: 6px; align-items: center; overflow-x: auto; min-height: 62px;
+    }
+    .timeline-label { font-size: 10px; color: var(--hint); writing-mode: vertical-rl; transform: rotate(180deg); flex-shrink: 0; }
+    .timeline-clip {
+      height: 44px; min-width: 72px; border-radius: 6px; background: var(--accent-light);
+      border: 0.5px solid #B5D4F4; display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: var(--accent-text); font-weight: 500;
+      cursor: pointer; flex-shrink: 0; padding: 0 8px; transition: all 0.12s;
+    }
+    .timeline-clip:hover { border-color: var(--accent); }
+    .timeline-clip.active { border: 1.5px solid var(--accent); }
+    .timeline-empty { font-size: 12px; color: var(--hint); }
+
+    .prompt-area { padding: 1rem 1.25rem; }
+    .prompt-label { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 8px; }
+    .prompt-input-wrap { position: relative; }
+    .prompt-input {
+      width: 100%; padding: 10px 110px 10px 12px;
+      border: 0.5px solid var(--border2); border-radius: var(--radius-md);
+      font-family: 'DM Sans', sans-serif; font-size: 13px; resize: none; min-height: 72px;
+      background: var(--bg); color: var(--text); line-height: 1.6;
+    }
+    .prompt-input:focus { outline: none; border-color: var(--accent); }
+    .prompt-input::placeholder { color: var(--hint); }
+
+    .generate-btn {
+      position: absolute; bottom: 10px; right: 10px;
+      background: var(--accent); color: #fff; border: none;
+      border-radius: var(--radius-md); padding: 7px 16px;
+      font-size: 12px; font-weight: 500; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; transition: all 0.15s;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .generate-btn:hover { opacity: 0.85; }
+    .generate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip {
+      font-size: 11px; padding: 4px 10px; border: 0.5px solid var(--border2);
+      border-radius: 20px; color: var(--muted); cursor: pointer;
+      background: var(--bg); transition: all 0.12s;
+    }
+    .chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+    .output-section {
+      border-top: 0.5px solid var(--border); padding: 0 1.25rem;
+      max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding 0.3s;
+    }
+    .output-section.visible { max-height: 600px; padding: 1rem 1.25rem; }
+    .output-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .output-tag { font-size: 11px; font-weight: 500; padding: 2px 9px; background: var(--success-bg); color: var(--success); border-radius: 20px; }
+    .output-title { font-size: 13px; font-weight: 500; color: var(--text); }
+    .script-box {
+      background: var(--bg2); border-radius: var(--radius-md); border: 0.5px solid var(--border);
+      padding: 14px; font-size: 13px; line-height: 1.75; color: var(--text);
+      max-height: 280px; overflow-y: auto; white-space: pre-wrap;
+    }
+    .output-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .action-btn {
+      font-size: 12px; padding: 7px 14px; border: 0.5px solid var(--border2);
+      border-radius: var(--radius-md); background: var(--bg); color: var(--text);
+      cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.12s;
+    }
+    .action-btn:hover { background: var(--bg2); }
+    .action-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .action-btn.primary:hover { opacity: 0.85; }
+
+    .error-box {
+      background: #fff5f5; border: 0.5px solid #F7C1C1; border-radius: var(--radius-md);
+      padding: 12px 14px; font-size: 13px; color: var(--danger); display: none; margin-top: 8px;
+    }
+
+    .footer {
+      text-align: center; padding: 1rem; font-size: 11px;
+      color: var(--hint); border-top: 0.5px solid var(--border);
+    }
+
+    @media (max-width: 600px) {
+      .workspace { grid-template-columns: 1fr; }
+      .sidebar { border-right: none; border-bottom: 0.5px solid var(--border); }
+      body { padding: 0.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo">FRAME<span>AI</span></div>
+    <div class="badge">v1.0</div>
+    <div class="header-right">
+      <div class="status-dot"></div>
+      <span class="status-txt">AI ready</span>
+    </div>
+  </div>
+
+  <!-- WORKSPACE -->
+  <div class="workspace">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Assets</div>
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+          <div class="icon">📁</div>
+          <p><strong>Click or drag to upload</strong><br>video, image, audio</p>
+        </div>
+        <input type="file" id="file-input" multiple accept="video/*,image/*,audio/*" onchange="handleFiles(this.files)" />
+        <div class="asset-list" id="asset-list">
+          <div class="empty-assets" id="empty-msg">No assets yet</div>
+        </div>
+      </div>
+      <div class="sidebar-section" style="flex:1;overflow-y:auto;">
+        <div class="sidebar-label">Scene order</div>
+        <div class="scene-list" id="scene-order">
+          <span style="font-size:12px;color:var(--hint);">Add assets to build scenes</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+
+      <!-- PREVIEW -->
+      <div class="preview-area">
+        <div class="preview-placeholder" id="preview-placeholder">
+          <div class="big-icon">🎬</div>
+          <p>Select an asset to preview</p>
+        </div>
+        <video class="preview-video" id="preview-video" controls></video>
+        <img class="preview-image" id="preview-image" alt="preview" />
+        <div class="gen-overlay" id="gen-overlay">
+          <div class="gen-title" id="gen-title">Analyzing assets...</div>
+          <div class="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
+          <div class="gen-sub" id="gen-sub">Please wait</div>
+        </div>
+      </div>
+
+      <!-- TIMELINE -->
+      <div class="timeline-strip" id="timeline">
+        <span class="timeline-label">TIMELINE</span>
+        <span class="timeline-empty" id="timeline-empty">Add assets to see clips</span>
+      </div>
+
+      <!-- PROMPT -->
+      <div class="prompt-area">
+        <div class="prompt-label">Describe your edit to the AI</div>
+        <div class="prompt-input-wrap">
+          <textarea class="prompt-input" id="prompt-input"
+            placeholder="e.g. Start with a wide shot, cinematic fade transitions, warm colour grade, slow zoom out at the end..."></textarea>
+          <button class="generate-btn" id="gen-btn" onclick="generateEdit()">
+            ✦ Generate
+          </button>
+        </div>
+        <div class="error-box" id="error-box"></div>
+        <div class="suggestions">
+          <span class="chip" onclick="fillPrompt(this)">Cinematic fade transitions</span>
+          <span class="chip" onclick="fillPrompt(this)">Fast cuts synced to music beat</span>
+          <span class="chip" onclick="fillPrompt(this)">Slow motion with warm colour grade</span>
+          <span class="chip" onclick="fillPrompt(this)">Documentary-style narration flow</span>
+          <span class="chip" onclick="fillPrompt(this)">Social media reel — 30 seconds</span>
+          <span class="chip" onclick="fillPrompt(this)">Vlog style with jump cuts</span>
+        </div>
+      </div>
+
+      <!-- OUTPUT -->
+      <div class="output-section" id="output-section">
+        <div class="output-header">
+          <span class="output-tag">AI Output</span>
+          <span class="output-title">Edit plan generated</span>
+        </div>
+        <div class="script-box" id="script-box"></div>
+        <div class="output-actions">
+          <button class="action-btn primary" onclick="refineOutput()">Refine plan ✦</button>
+          <button class="action-btn" onclick="copyOutput()">Copy</button>
+          <button class="action-btn" onclick="downloadOutput()">Download .txt</button>
+          <button class="action-btn" onclick="resetOutput()">Clear</button>
+        </div>
+      </div>
+
+      <div class="footer">
+        FrameAI &mdash; Powered by Claude (Anthropic) &middot; Free to use &middot; No account needed
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let assets = [];
+  let activeAssetId = null;
+  let lastOutput = '';
+  let lastPrompt = '';
+
+  /* FILE UPLOAD */
+  function handleFiles(files) {
+    Array.from(files).forEach(f => {
+      const id = Date.now() + '-' + Math.random().toString(36).slice(2);
+      const url = URL.createObjectURL(f);
+      const type = f.type.startsWith('video') ? 'video' : f.type.startsWith('audio') ? 'audio' : 'image';
+      const icons = { video: '🎞', audio: '🎵', image: '🖼' };
+      assets.push({ id, name: f.name, url, type, icon: icons[type], size: (f.size / 1024).toFixed(0) + ' KB' });
+      addTimelineClip(f.name, type, id);
+    });
+    renderAssets();
+    updateSceneOrder();
+  }
+
+  function renderAssets() {
+    const list = document.getElementById('asset-list');
+    list.querySelectorAll('.asset-item').forEach(e => e.remove());
+    const em = document.getElementById('empty-msg');
+    if (em) em.style.display = assets.length ? 'none' : '';
+    assets.forEach(a => {
+      const div = document.createElement('div');
+      div.className = 'asset-item' + (activeAssetId === a.id ? ' active' : '');
+      div.innerHTML = `
+        <div class="asset-thumb">${a.type === 'image' ? `<img src="${a.url}" alt="">` : a.icon}</div>
+        <div class="asset-info">
+          <div class="asset-name" title="${a.name}">${a.name}</div>
+          <div class="asset-meta">${a.type} &middot; ${a.size}</div>
+        </div>
+        <span class="asset-remove" title="Remove">&#x2715;</span>`;
+      div.querySelector('.asset-remove').addEventListener('click', e => { e.stopPropagation(); removeAsset(a.id); });
+      div.addEventListener('click', () => previewAsset(a));
+      list.appendChild(div);
+    });
+  }
+
+  function previewAsset(a) {
+    activeAssetId = a.id;
+    renderAssets();
+    const vid = document.getElementById('preview-video');
+    const img = document.getElementById('preview-image');
+    const ph = document.getElementById('preview-placeholder');
+    vid.style.display = 'none'; img.style.display = 'none'; ph.style.display = 'none';
+    if (a.type === 'video') { vid.src = a.url; vid.style.display = 'block'; }
+    else if (a.type === 'image') { img.src = a.url; img.style.display = 'block'; }
+    else { ph.style.display = 'block'; ph.innerHTML = `<div class="big-icon">🎵</div><p style="color:rgba(255,255,255,0.4);">${a.name}</p>`; }
+    document.querySelectorAll('.timeline-clip').forEach(c => c.classList.toggle('active', c.dataset.id === a.id));
+  }
+
+  function removeAsset(id) {
+    const a = assets.find(x => x.id === id);
+    if (a) URL.revokeObjectURL(a.url);
+    assets = assets.filter(x => x.id !== id);
+    const clip = document.querySelector(`.timeline-clip[data-id="${id}"]`);
+    if (clip) clip.remove();
+    if (!document.querySelectorAll('.timeline-clip').length) {
+      if (!document.getElementById('timeline-empty')) {
+        const e = document.createElement('span');
+        e.id = 'timeline-empty'; e.className = 'timeline-empty'; e.textContent = 'Add assets to see clips';
+        document.getElementById('timeline').appendChild(e);
+      }
+    }
+    if (activeAssetId === id) {
+      activeAssetId = null;
+      document.getElementById('preview-video').style.display = 'none';
+      document.getElementById('preview-image').style.display = 'none';
+      const ph = document.getElementById('preview-placeholder');
+      ph.style.display = 'block';
+      ph.innerHTML = '<div class="big-icon">🎬</div><p>Select an asset to preview</p>';
+    }
+    renderAssets(); updateSceneOrder();
+  }
+
+  function addTimelineClip(name, type, id) {
+    const tl = document.getElementById('timeline');
+    const empty = document.getElementById('timeline-empty');
+    if (empty) empty.remove();
+    const clip = document.createElement('div');
+    clip.className = 'timeline-clip'; clip.dataset.id = id;
+    clip.textContent = name.length > 14 ? name.slice(0, 13) + '…' : name;
+    clip.addEventListener('click', () => { const a = assets.find(x => x.id === id); if (a) previewAsset(a); });
+    tl.appendChild(clip);
+  }
+
+  function updateSceneOrder() {
+    const el = document.getElementById('scene-order');
+    if (!assets.length) { el.innerHTML = '<span style="font-size:12px;color:var(--hint);">Add assets to build scenes</span>'; return; }
+    el.innerHTML = assets.map((a, i) => `
+      <div class="scene-row">
+        <span class="scene-num">${i + 1}</span>
+        <span>${a.icon}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.name}</span>
+      </div>`).join('');
+  }
+
+  function fillPrompt(el) {
+    document.getElementById('prompt-input').value = el.textContent;
+    document.getElementById('prompt-input').focus();
+  }
+
+  /* GENERATE — calls /api/generate (your serverless function) */
+  async function generateEdit() {
+    const prompt = document.getElementById('prompt-input').value.trim();
+    if (!prompt) { document.getElementById('prompt-input').focus(); return; }
+
+    lastPrompt = prompt;
+    hideError();
+
+    const btn = document.getElementById('gen-btn');
+    btn.disabled = true;
+    document.getElementById('gen-overlay').classList.add('active');
+    document.getElementById('prog-fill').style.width = '0%';
+
+    const assetDesc = assets.length
+      ? assets.map((a, i) => `${i + 1}. ${a.name} (${a.type})`).join('\n')
+      : '(no assets uploaded — generate a general edit plan)';
+
+    await animateProgress();
+
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetDesc, prompt })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) throw new Error(data.error || 'Server error');
+
+      lastOutput = data.result;
+      document.getElementById('gen-overlay').classList.remove('active');
+      showOutput(lastOutput);
+
+    } catch (err) {
+      document.getElementById('gen-overlay').classList.remove('active');
+      showError('Something went wrong: ' + err.message);
+    }
+
+    btn.disabled = false;
+  }
+
+  function animateProgress() {
+    return new Promise(resolve => {
+      const fill = document.getElementById('prog-fill');
+      const title = document.getElementById('gen-title');
+      const sub = document.getElementById('gen-sub');
+      const steps = [
+        ['Reading assets...', 'Scanning your media files', 20],
+        ['Parsing instructions...', 'Understanding your creative vision', 45],
+        ['Planning scenes...', 'Sequencing clips intelligently', 70],
+        ['Generating edit plan...', 'Writing your professional script', 90],
+      ];
+      let i = 0;
+      const next = () => { if (i >= steps.length) { resolve(); return; } const [t,s,w] = steps[i++]; title.textContent=t; sub.textContent=s; fill.style.width=w+'%'; setTimeout(next, 850); };
+      next();
+    });
+  }
+
+  function showOutput(text) {
+    document.getElementById('script-box').textContent = text;
+    const out = document.getElementById('output-section');
+    out.classList.add('visible');
+    setTimeout(() => out.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+  }
+
+  function showError(msg) { const b = document.getElementById('error-box'); b.textContent = msg; b.style.display = 'block'; }
+  function hideError() { document.getElementById('error-box').style.display = 'none'; }
+
+  async function refineOutput() {
+    if (!lastOutput) { alert('Generate a plan first.'); return; }
+    const extra = prompt('What would you like to change or add?');
+    if (!extra) return;
+    document.getElementById('gen-btn').disabled = true;
+    document.getElementById('gen-overlay').classList.add('active');
+    hideError();
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assetDesc: assets.map((a,i) => `${i+1}. ${a.name} (${a.type})`).join('\n') || '(none)',
+          prompt: `Here is an existing video edit plan:\n\n${lastOutput}\n\nPlease refine it based on this feedback: ${extra}`
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Server error');
+      lastOutput = data.result;
+      showOutput(lastOutput);
+    } catch(e) { showError('Refinement failed: ' + e.message); }
+    document.getElementById('gen-overlay').classList.remove('active');
+    document.getElementById('gen-btn').disabled = false;
+  }
+
+  function copyOutput() {
+    navigator.clipboard.writeText(lastOutput).then(() => {
+      const btn = event.target; const orig = btn.textContent;
+      btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = orig, 1500);
+    });
+  }
+
+  function downloadOutput() {
+    const blob = new Blob([lastOutput], { type: 'text/plain' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'frameai-edit-plan.txt'; a.click();
+  }
+
+  function resetOutput() {
+    document.getElementById('output-section').classList.remove('visible');
+    document.getElementById('script-box').textContent = '';
+    lastOutput = '';
+  }
+
+  /* DRAG & DROP on upload zone */
+  const zone = document.getElementById('upload-zone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); });
+</script>
+
+</body>
+</html>
