@@ -23,21 +23,23 @@ Edit instruction:
 ${prompt}`;
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }] }]
-        })
-      }
-    );
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'https://frameai-sable.vercel.app',
+        'X-Title': 'FrameAI'
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-3.1-8b-instruct:free',
+        messages: [{ role: 'user', content: fullPrompt }]
+      })
+    });
 
     const data = await response.json();
     if (data.error) return res.status(500).json({ error: data.error.message });
-
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response.';
+    const text = data.choices?.[0]?.message?.content || 'No response.';
     return res.status(200).json({ result: text });
 
   } catch (err) {
