@@ -6,31 +6,13 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const apiKey = process.env.CLOUDINARY_API_KEY;
-    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!token) return res.status(500).json({ error: 'Blob storage not configured' });
 
-    if (!cloudName || !apiKey || !apiSecret) {
-      return res.status(500).json({ error: `Missing config: cloud=${cloudName}, key=${apiKey ? 'ok' : 'missing'}` });
-    }
-
-    const { createHmac } = await import('crypto');
-    const timestamp = Math.round(Date.now() / 1000);
-    const folder = 'frameai';
-
-    // Cloudinary signature: alphabetical order of params
-    const toSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
-    
-    const { createHash } = await import('crypto');
-    const signature = createHash('sha1').update(toSign).digest('hex');
-
+    // Return token info so frontend can upload directly
     return res.status(200).json({
-      signature,
-      timestamp,
-      cloudName,
-      apiKey,
-      folder,
-      uploadUrl: `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`
+      token,
+      uploadUrl: 'https://blob.vercel-storage.com'
     });
 
   } catch (err) {
