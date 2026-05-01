@@ -7,26 +7,16 @@ export default async function handler(req, res) {
 
   try {
     const { clips, settings } = req.body;
-
     if (!clips || clips.length === 0) {
       return res.status(400).json({ error: 'No clips provided' });
     }
 
-    const speed = parseFloat(settings?.speed || 1.0);
-    const textOverlay = settings?.textOverlay || '';
-    const textPosition = settings?.textPosition || 'bottom';
+    // Return the uploaded blob URL directly for download
+    const outputUrl = clips[0].url;
 
-    // Build output URL using first clip with transformations via query params
-    const firstClip = clips[0];
-    const clipUrl = firstClip.url;
-
-    // Return the clip URLs for the frontend to display
-    // For actual video processing we return the direct URLs
     return res.status(200).json({
       success: true,
-      outputUrl: clipUrl,
-      allClips: clips.map(c => c.url),
-      settings: { speed, textOverlay, textPosition },
+      outputUrl,
       message: 'Video ready'
     });
 
