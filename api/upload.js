@@ -1,5 +1,3 @@
-import crypto from 'crypto';
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -13,14 +11,18 @@ export default async function handler(req, res) {
     const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
     if (!cloudName || !apiKey || !apiSecret) {
-      return res.status(500).json({ error: 'Cloudinary not configured' });
+      return res.status(500).json({ error: `Missing config: cloud=${cloudName}, key=${apiKey ? 'ok' : 'missing'}` });
     }
 
+    const { createHmac } = await import('crypto');
     const timestamp = Math.round(Date.now() / 1000);
     const folder = 'frameai';
 
+    // Cloudinary signature: alphabetical order of params
     const toSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
-    const signature = crypto.createHash('sha1').update(toSign).digest('hex');
+    
+    const { createHash } = await import('crypto');
+    const signature = createHash('sha1').update(toSign).digest('hex');
 
     return res.status(200).json({
       signature,
