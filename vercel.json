@@ -1,5 +1,9 @@
 {
   "functions": {
+    "api/upload.js": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
     "api/edit.js": {
       "memory": 1024,
       "maxDuration": 60
