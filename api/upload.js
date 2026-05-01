@@ -19,7 +19,6 @@ export default async function handler(req, res) {
     const timestamp = Math.round(Date.now() / 1000);
     const folder = 'frameai';
 
-    // Create signature
     const toSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
     const signature = crypto.createHash('sha1').update(toSign).digest('hex');
 
