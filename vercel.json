@@ -1,4 +1,13 @@
 {
+  "functions": {
+    "api/edit.js": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "api/generate.js": {
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" }
   ]
