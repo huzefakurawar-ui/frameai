@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>FrameAI v3 — Large Video Editor</title>
+  <title>FrameAI v3 — AI Video Editor</title>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -110,7 +110,7 @@
     .action-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
     .action-btn.primary:hover{opacity:0.85;}
     .error-box{background:var(--danger-bg);border:0.5px solid #F7C1C1;border-radius:var(--radius-md);padding:10px 14px;font-size:12px;color:var(--danger);display:none;margin-top:8px;line-height:1.5;}
-    .warning-box{background:var(--warning-bg);border:0.5px solid #F0C070;border-radius:var(--radius-md);padding:10px 14px;font-size:12px;color:var(--warning);line-height:1.5;}
+    .warning-box{background:var(--warning-bg);border:0.5px solid #F0C070;border-radius:var(--radius-md);padding:10px 14px;font-size:12px;color:var(--warning);line-height:1.5;margin-bottom:4px;}
     .plan-area{padding:1.25rem;}
     .prompt-label{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:8px;}
     .prompt-wrap{position:relative;}
@@ -191,7 +191,7 @@
       </div>
 
       <div class="main-content">
-        <div class="warning-box">⚡ <strong>Large video support enabled.</strong> Videos upload to Vercel Blob storage — supports 100MB+ files.</div>
+        <div class="warning-box">⚡ <strong>Powered by Render FFmpeg server.</strong> First request may take 30-60 seconds to wake up. After that it runs fast!</div>
 
         <div class="preview-area" id="preview-area">
           <div class="preview-placeholder" id="preview-placeholder">
@@ -291,14 +291,18 @@
     </div>
   </div>
 
-  <div class="footer">FrameAI v3 &mdash; Vercel Blob storage &middot; AI by OpenRouter &middot; Free to use</div>
+  <div class="footer">FrameAI v3 &mdash; FFmpeg on Render &middot; AI by OpenRouter &middot; Free to use</div>
 </div>
 
 <script>
+  // !! IMPORTANT: Your Render server URL
+  const RENDER_SERVER = 'https://frameai-server.onrender.com';
+
   let videoClips = [];
-  let referenceVideo = null;
   let audioFile = null;
+  let referenceVideo = null;
   let lastPlan = '';
+  let outputBlob = null;
 
   function switchTab(tab) {
     document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active',(i===0&&tab==='edit')||(i===1&&tab==='plan')));
@@ -306,136 +310,84 @@
     document.getElementById('tab-plan').classList.toggle('active',tab==='plan');
   }
 
-  // Upload file to Vercel Blob via server
-  async function uploadFile(file, onProgress) {
-    onProgress(10);
-
-    // Get upload token from server
-    const tokenRes = await fetch('/api/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: file.name })
+  // Upload file to Render server
+  async function uploadToRender(file, onProgress) {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${RENDER_SERVER}/upload`);
+      xhr.upload.onprogress = e => { if(e.lengthComputable) onProgress(Math.round(e.loaded/e.total*100)); };
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (xhr.status === 200) resolve(data);
+          else reject(new Error(data.error || 'Upload failed'));
+        } catch(e) { reject(new Error('Upload failed')); }
+      };
+      xhr.onerror = () => reject(new Error('Network error — server may be waking up, try again in 30 seconds'));
+      xhr.send(formData);
     });
-
-    if (!tokenRes.ok) {
-      const err = await tokenRes.json();
-      throw new Error(err.error || 'Failed to get upload token');
-    }
-
-    onProgress(30);
-
-    // Upload directly to Vercel Blob
-    const { token } = await tokenRes.json();
-
-    const uploadRes = await fetch(`/api/upload-file?filename=${encodeURIComponent(file.name)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': file.type,
-        'Authorization': `Bearer ${token}`
-      },
-      body: file
-    });
-
-    onProgress(80);
-
-    if (!uploadRes.ok) throw new Error('Upload to storage failed');
-
-    const data = await uploadRes.json();
-    onProgress(100);
-    return { url: data.url, publicId: data.url };
   }
 
-  // Simpler approach - use local object URLs for preview
-  // and send base64 for small files or blob URL for processing
   async function handleVideoFiles(files) {
     Array.from(files).forEach(async f => {
       const id = Date.now() + '-' + Math.random().toString(36).slice(2);
       const localUrl = URL.createObjectURL(f);
-      const clip = {
-        id, name: f.name,
-        size: (f.size/1024/1024).toFixed(1) + ' MB',
-        url: localUrl,
-        blobUrl: null,
-        status: 'uploading',
-        progress: 0,
-        file: f
-      };
+      const clip = { id, name: f.name, size: (f.size/1024/1024).toFixed(1)+' MB', url: localUrl, filename: null, status: 'uploading', progress: 0, file: f };
       videoClips.push(clip);
       renderAssets();
       addTimelineClip(clip);
       document.getElementById('empty-msg').style.display = 'none';
 
       try {
-        // Upload to Vercel Blob
-        const result = await uploadFileToBlob(f, (p) => {
+        document.getElementById('proc-title').textContent = 'Uploading ' + f.name + '...';
+        document.getElementById('proc-sub').textContent = 'Server may take 30-60s to wake up on first upload';
+        document.getElementById('prog-fill').style.width = '0%';
+        document.getElementById('proc-overlay').classList.add('active');
+
+        const result = await uploadToRender(f, p => {
           clip.progress = p;
           updateClipProgress(clip.id, p);
+          document.getElementById('prog-fill').style.width = p + '%';
         });
-        clip.blobUrl = result.url;
+
+        clip.filename = result.filename;
         clip.status = 'done';
         updateClipStatus(clip.id, 'done');
+        document.getElementById('proc-overlay').classList.remove('active');
+
       } catch(e) {
-        // If blob upload fails, still allow local preview
-        clip.status = 'done';
-        clip.blobUrl = localUrl;
-        updateClipStatus(clip.id, 'done');
-        console.warn('Blob upload failed, using local URL:', e.message);
+        clip.status = 'error';
+        updateClipStatus(clip.id, 'error');
+        document.getElementById('proc-overlay').classList.remove('active');
+        showError('Upload failed: ' + e.message);
       }
-    });
-  }
-
-  async function uploadFileToBlob(file, onProgress) {
-    onProgress(20);
-    const formData = new FormData();
-    formData.append('file', file);
-
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/api/upload?filename=${encodeURIComponent(file.name)}`);
-      xhr.upload.onprogress = e => {
-        if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 80) + 10);
-      };
-      xhr.onload = () => {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          if (xhr.status === 200 && data.url) {
-            onProgress(100);
-            resolve(data);
-          } else {
-            reject(new Error(data.error || 'Upload failed'));
-          }
-        } catch(e) { reject(e); }
-      };
-      xhr.onerror = () => reject(new Error('Network error'));
-      xhr.send(formData);
     });
   }
 
   async function handleReferenceFile(f) {
     if (!f) return;
     const s = document.getElementById('ref-status');
-    s.textContent = '⏳ Uploading reference...';
+    s.textContent = '⏳ Uploading...';
     try {
-      const localUrl = URL.createObjectURL(f);
-      referenceVideo = { url: localUrl, name: f.name };
+      const result = await uploadToRender(f, p => s.textContent = `⏳ ${p}%`);
+      referenceVideo = { filename: result.filename, name: f.name };
       s.textContent = '✅ ' + f.name;
       s.style.color = '#9B59B6';
-    } catch(e) {
-      s.textContent = '❌ Failed: ' + e.message;
-    }
+    } catch(e) { s.textContent = '❌ ' + e.message; }
   }
 
   async function handleAudioFile(f) {
     if (!f) return;
     const s = document.getElementById('audio-status');
+    s.textContent = '⏳ Uploading audio...';
     try {
-      const localUrl = URL.createObjectURL(f);
-      audioFile = { url: localUrl, name: f.name, file: f };
+      const result = await uploadToRender(f, p => s.textContent = `⏳ ${p}%`);
+      audioFile = { filename: result.filename, name: f.name };
       s.textContent = '✅ ' + f.name;
       s.style.color = 'var(--success)';
-    } catch(e) {
-      s.textContent = '❌ Failed';
-    }
+    } catch(e) { s.textContent = '❌ ' + e.message; }
   }
 
   function renderAssets() {
@@ -443,123 +395,119 @@
     list.querySelectorAll('.asset-item').forEach(e => e.remove());
     videoClips.forEach(c => {
       const div = document.createElement('div');
-      div.className = 'asset-item' + (c.status==='done'?' done':' uploading');
+      div.className = 'asset-item' + (c.status==='done'?' done':c.status==='uploading'?' uploading':'');
       div.id = 'asset-' + c.id;
       div.innerHTML = `<div class="asset-thumb">🎞</div>
         <div class="asset-info">
           <div class="asset-name" title="${c.name}">${c.name}</div>
-          <div class="asset-meta">${c.size} · <span id="status-${c.id}">${c.status==='done'?'✅ Ready':'⏳ Uploading...'}</span></div>
-          ${c.status==='uploading'?`<div class="upload-progress"><div class="upload-progress-fill" id="prog-${c.id}" style="width:${c.progress}%"></div></div>`:''}
+          <div class="asset-meta">${c.size} · <span id="status-${c.id}">${c.status==='done'?'✅ Ready':c.status==='uploading'?'⏳ Uploading...':'❌ Error'}</span></div>
+          ${c.status==='uploading'?`<div class="upload-progress"><div class="upload-progress-fill" id="prog-${c.id}" style="width:0%"></div></div>`:''}
         </div>
         <span class="asset-remove" onclick="removeClip('${c.id}')">✕</span>`;
-      div.addEventListener('click', () => previewClip(c));
+      div.addEventListener('click', () => {
+        const vid = document.getElementById('preview-video');
+        vid.src = c.url; vid.style.display = 'block';
+        document.getElementById('preview-placeholder').style.display = 'none';
+      });
       list.appendChild(div);
     });
   }
 
-  function previewClip(c) {
-    const vid = document.getElementById('preview-video');
-    vid.src = c.url;
-    vid.style.display = 'block';
-    document.getElementById('preview-placeholder').style.display = 'none';
-  }
-
   function updateClipProgress(id, p) {
-    const el = document.getElementById('prog-' + id);
-    if (el) el.style.width = p + '%';
-    const tp = document.querySelector(`.timeline-clip[data-id="${id}"] .timeline-clip-progress`);
-    if (tp) tp.style.width = p + '%';
+    const el = document.getElementById('prog-' + id); if(el) el.style.width = p + '%';
+    const tp = document.querySelector(`.timeline-clip[data-id="${id}"] .timeline-clip-progress`); if(tp) tp.style.width = p + '%';
   }
 
   function updateClipStatus(id, status) {
-    const el = document.getElementById('status-' + id);
-    if (el) el.textContent = status === 'done' ? '✅ Ready' : '❌ Error';
-    const item = document.getElementById('asset-' + id);
-    if (item) { item.classList.remove('uploading'); if(status==='done') item.classList.add('done'); }
-    const clip = document.querySelector(`.timeline-clip[data-id="${id}"]`);
-    if (clip) { clip.classList.remove('uploading'); if(status==='done') clip.classList.add('done'); }
+    const el = document.getElementById('status-' + id); if(el) el.textContent = status==='done'?'✅ Ready':'❌ Error';
+    const item = document.getElementById('asset-' + id); if(item){item.classList.remove('uploading');if(status==='done')item.classList.add('done');}
+    const clip = document.querySelector(`.timeline-clip[data-id="${id}"]`); if(clip){clip.classList.remove('uploading');if(status==='done')clip.classList.add('done');}
   }
 
   function removeClip(id) {
     videoClips = videoClips.filter(c => c.id !== id);
-    const clip = document.querySelector(`.timeline-clip[data-id="${id}"]`);
-    if (clip) clip.remove();
+    const clip = document.querySelector(`.timeline-clip[data-id="${id}"]`); if(clip) clip.remove();
     renderAssets();
     if (!document.querySelectorAll('.timeline-clip').length) {
-      if (!document.getElementById('timeline-empty')) {
-        const e = document.createElement('span');
-        e.id = 'timeline-empty'; e.className = 'timeline-empty';
-        e.textContent = 'Upload videos to see clips';
-        document.getElementById('timeline').appendChild(e);
-      }
+      const e = document.createElement('span'); e.id='timeline-empty'; e.className='timeline-empty'; e.textContent='Upload videos to see clips';
+      document.getElementById('timeline').appendChild(e);
     }
   }
 
   function addTimelineClip(clip) {
     const tl = document.getElementById('timeline');
-    const empty = document.getElementById('timeline-empty');
-    if (empty) empty.remove();
+    const empty = document.getElementById('timeline-empty'); if(empty) empty.remove();
     const div = document.createElement('div');
-    div.className = 'timeline-clip uploading';
-    div.dataset.id = clip.id;
+    div.className = 'timeline-clip uploading'; div.dataset.id = clip.id;
     div.innerHTML = `<span>${clip.name.length>12?clip.name.slice(0,11)+'…':clip.name}</span><div class="timeline-clip-progress" style="width:0%"></div>`;
-    div.addEventListener('click', () => previewClip(clip));
     tl.appendChild(div);
   }
 
   async function processVideo() {
-    const readyClips = videoClips.filter(c => c.status === 'done');
-    if (!readyClips.length) { showError('Please upload at least one video first.'); return; }
+    const readyClips = videoClips.filter(c => c.status === 'done' && c.filename);
+    if (!readyClips.length) { showError('Please wait for all videos to finish uploading.'); return; }
+    if (videoClips.some(c => c.status === 'uploading')) { showError('Some videos are still uploading. Please wait.'); return; }
 
     hideError();
     document.getElementById('edit-btn').disabled = true;
     document.getElementById('proc-overlay').classList.add('active');
 
     const steps = [
-      ['Preparing clips...', 'Getting your videos ready', 25],
-      ['Processing...', 'Applying your settings', 60],
-      ['Finalizing...', 'Almost done!', 90],
+      ['Waking up server...', 'FFmpeg server starting (30-60s first time)', 15],
+      ['Processing videos...', 'Merging your clips with FFmpeg', 40],
+      ['Applying effects...', 'Adding text, speed, audio', 65],
+      ['Encoding output...', 'Creating your MP4 file', 85],
+      ['Almost done...', 'Finalizing video', 95],
     ];
     let si = 0;
     const interval = setInterval(() => {
       if (si >= steps.length) { clearInterval(interval); return; }
-      const [t, s, w] = steps[si++];
+      const [t,s,w] = steps[si++];
       document.getElementById('proc-title').textContent = t;
       document.getElementById('proc-sub').textContent = s;
       document.getElementById('prog-fill').style.width = w + '%';
-    }, 2000);
+    }, 8000);
 
     try {
-      const clips = readyClips.map(c => ({ url: c.blobUrl || c.url, name: c.name }));
+      const clips = readyClips.map(c => c.filename);
       const settings = {
         speed: parseFloat(document.getElementById('speed-select').value),
         textOverlay: document.getElementById('text-overlay').value.trim(),
         textPosition: document.getElementById('text-position').value,
       };
 
-      const res = await fetch('/api/edit', {
+      const audioMode = document.getElementById('audio-mode').value;
+      const audioFilename = audioMode === 'uploaded' && audioFile ? audioFile.filename : null;
+
+      const res = await fetch(`${RENDER_SERVER}/edit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clips, settings })
+        body: JSON.stringify({ clips, audioFilename, settings })
       });
 
-      const data = await res.json();
       clearInterval(interval);
 
-      if (!res.ok || data.error) throw new Error(data.error || 'Processing failed');
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Processing failed');
+      }
+
+      // Get video blob
+      const blob = await res.blob();
+      outputBlob = blob;
+      const outputUrl = URL.createObjectURL(blob);
 
       document.getElementById('proc-overlay').classList.remove('active');
       document.getElementById('prog-fill').style.width = '100%';
 
       const outputVideo = document.getElementById('output-video');
-      outputVideo.src = data.outputUrl;
+      outputVideo.src = outputUrl;
       outputVideo.load();
 
       document.getElementById('download-btn').onclick = () => {
         const a = document.createElement('a');
-        a.href = data.outputUrl;
+        a.href = outputUrl;
         a.download = 'frameai_output.mp4';
-        a.target = '_blank';
         a.click();
       };
 
@@ -575,44 +523,34 @@
     document.getElementById('edit-btn').disabled = false;
   }
 
-  function showError(msg) { const b=document.getElementById('error-box'); b.textContent=msg; b.style.display='block'; }
-  function hideError() { document.getElementById('error-box').style.display='none'; }
+  function showError(msg){const b=document.getElementById('error-box');b.textContent=msg;b.style.display='block';}
+  function hideError(){document.getElementById('error-box').style.display='none';}
 
   async function generatePlan() {
-    const prompt = document.getElementById('prompt-input').value.trim();
-    if (!prompt) return;
-    const btn = document.getElementById('gen-btn');
-    btn.disabled = true; btn.textContent = '...';
-    document.getElementById('plan-error-box').style.display = 'none';
-    const assetDesc = videoClips.length ? videoClips.map((c,i) => `${i+1}. ${c.name} (${c.size})`).join('\n') : '(none)';
+    const prompt = document.getElementById('prompt-input').value.trim(); if(!prompt) return;
+    const btn = document.getElementById('gen-btn'); btn.disabled=true; btn.textContent='...';
+    document.getElementById('plan-error-box').style.display='none';
+    const assetDesc = videoClips.length?videoClips.map((c,i)=>`${i+1}. ${c.name} (${c.size})`).join('\n'):'(none)';
     try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assetDesc, prompt, hasReference: !!referenceVideo, referenceDesc: referenceVideo?.name || '' })
-      });
+      const res = await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({assetDesc,prompt,hasReference:!!referenceVideo,referenceDesc:referenceVideo?.name||''})});
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Server error');
-      lastPlan = data.result;
-      const box = document.getElementById('script-box');
-      box.textContent = lastPlan; box.style.display = 'block';
-      document.getElementById('plan-actions').style.display = 'flex';
-    } catch(e) {
-      const eb = document.getElementById('plan-error-box');
-      eb.textContent = 'Error: ' + e.message; eb.style.display = 'block';
-    }
-    btn.disabled = false; btn.textContent = '✦ Generate';
+      if(!res.ok||data.error) throw new Error(data.error||'Server error');
+      lastPlan=data.result;
+      const box=document.getElementById('script-box');box.textContent=lastPlan;box.style.display='block';
+      document.getElementById('plan-actions').style.display='flex';
+    } catch(e){const eb=document.getElementById('plan-error-box');eb.textContent='Error: '+e.message;eb.style.display='block';}
+    btn.disabled=false;btn.textContent='✦ Generate';
   }
 
-  function fillPrompt(el) { document.getElementById('prompt-input').value = el.textContent; document.getElementById('prompt-input').focus(); }
-  function copyPlan() { navigator.clipboard.writeText(lastPlan).then(() => { const b=event.target; const o=b.textContent; b.textContent='Copied!'; setTimeout(()=>b.textContent=o,1500); }); }
-  function downloadPlan() { const blob=new Blob([lastPlan],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='frameai-v3-plan.txt'; a.click(); }
-  function clearPlan() { document.getElementById('script-box').style.display='none'; document.getElementById('script-box').textContent=''; document.getElementById('plan-actions').style.display='none'; lastPlan=''; }
+  function fillPrompt(el){document.getElementById('prompt-input').value=el.textContent;document.getElementById('prompt-input').focus();}
+  function copyPlan(){navigator.clipboard.writeText(lastPlan).then(()=>{const b=event.target;const o=b.textContent;b.textContent='Copied!';setTimeout(()=>b.textContent=o,1500);});}
+  function downloadPlan(){const blob=new Blob([lastPlan],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='frameai-plan.txt';a.click();}
+  function clearPlan(){document.getElementById('script-box').style.display='none';document.getElementById('script-box').textContent='';document.getElementById('plan-actions').style.display='none';lastPlan='';}
 
-  const zone = document.getElementById('upload-zone');
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); if(e.dataTransfer.files.length) handleVideoFiles(e.dataTransfer.files); });
+  const zone=document.getElementById('upload-zone');
+  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag-over');});
+  zone.addEventListener('dragleave',()=>zone.classList.remove('drag-over'));
+  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag-over');if(e.dataTransfer.files.length)handleVideoFiles(e.dataTransfer.files);});
 </script>
 </body>
 </html>
