@@ -57,8 +57,7 @@
     .size-hint{font-size:10px;color:var(--hint);margin-top:3px;}
     #file-input,#ref-input,#audio-input{display:none;}
     .asset-list{display:flex;flex-direction:column;gap:5px;margin-top:6px;}
-    .asset-item{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:var(--radius-md);border:0.5px solid var(--border);background:var(--bg);transition:all 0.12s;}
-    .asset-item.uploading{opacity:0.6;}
+    .asset-item{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:var(--radius-md);border:0.5px solid var(--border);background:var(--bg);transition:all 0.12s;cursor:pointer;}
     .asset-item.done{border-color:var(--success);}
     .asset-thumb{width:32px;height:24px;border-radius:4px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
     .asset-info{flex:1;min-width:0;}
@@ -66,8 +65,6 @@
     .asset-meta{font-size:10px;color:var(--hint);}
     .asset-remove{font-size:11px;color:var(--hint);cursor:pointer;flex-shrink:0;}
     .asset-remove:hover{color:var(--danger);}
-    .upload-progress{height:2px;background:var(--border);border-radius:1px;margin-top:4px;overflow:hidden;}
-    .upload-progress-fill{height:100%;background:var(--accent);border-radius:1px;transition:width 0.3s;}
     .main-content{padding:1.25rem;display:flex;flex-direction:column;gap:14px;}
     .preview-area{background:#080808;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;min-height:210px;position:relative;overflow:hidden;}
     .preview-placeholder{text-align:center;}
@@ -77,10 +74,7 @@
     .timeline-wrap{background:var(--bg2);border-radius:var(--radius-md);border:0.5px solid var(--border);padding:8px 12px;overflow-x:auto;}
     .timeline-inner{display:flex;gap:8px;align-items:center;min-height:52px;}
     .timeline-label{font-size:10px;color:var(--hint);writing-mode:vertical-rl;transform:rotate(180deg);flex-shrink:0;}
-    .timeline-clip{height:40px;min-width:80px;border-radius:6px;background:var(--accent-light);border:0.5px solid #B5D4F4;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;color:var(--accent-text);font-weight:500;cursor:pointer;flex-shrink:0;padding:0 10px;transition:all 0.12s;position:relative;overflow:hidden;}
-    .timeline-clip.uploading{background:var(--bg3);border-color:var(--border2);color:var(--hint);}
-    .timeline-clip.done{border-color:var(--accent);}
-    .timeline-clip-progress{position:absolute;bottom:0;left:0;height:2px;background:var(--accent);transition:width 0.3s;}
+    .timeline-clip{height:40px;min-width:80px;border-radius:6px;background:var(--accent-light);border:0.5px solid #B5D4F4;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--accent-text);font-weight:500;cursor:pointer;flex-shrink:0;padding:0 10px;transition:all 0.12s;}
     .timeline-empty{font-size:12px;color:var(--hint);}
     .settings-card{background:var(--bg2);border-radius:var(--radius-md);border:0.5px solid var(--border);padding:14px;}
     .settings-title{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em;}
@@ -110,7 +104,7 @@
     .action-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
     .action-btn.primary:hover{opacity:0.85;}
     .error-box{background:var(--danger-bg);border:0.5px solid #F7C1C1;border-radius:var(--radius-md);padding:10px 14px;font-size:12px;color:var(--danger);display:none;margin-top:8px;line-height:1.5;}
-    .warning-box{background:var(--warning-bg);border:0.5px solid #F0C070;border-radius:var(--radius-md);padding:10px 14px;font-size:12px;color:var(--warning);line-height:1.5;margin-bottom:4px;}
+    .warning-box{background:var(--warning-bg);border:0.5px solid #F0C070;border-radius:var(--radius-md);padding:10px 14px;font-size:12px;color:var(--warning);line-height:1.5;}
     .plan-area{padding:1.25rem;}
     .prompt-label{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:8px;}
     .prompt-wrap{position:relative;}
@@ -191,7 +185,7 @@
       </div>
 
       <div class="main-content">
-        <div class="warning-box">⚡ <strong>Powered by Render FFmpeg server.</strong> First request may take 30-60 seconds to wake up. After that it runs fast!</div>
+        <div class="warning-box">⚡ <strong>Powered by Render FFmpeg.</strong> First request may take 30-60 seconds to wake up. After that it runs fast!</div>
 
         <div class="preview-area" id="preview-area">
           <div class="preview-placeholder" id="preview-placeholder">
@@ -200,7 +194,7 @@
           </div>
           <video id="preview-video" controls></video>
           <div class="processing-overlay" id="proc-overlay">
-            <div class="proc-title" id="proc-title">Uploading...</div>
+            <div class="proc-title" id="proc-title">Processing...</div>
             <div class="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
             <div class="proc-sub" id="proc-sub">Please wait</div>
           </div>
@@ -295,14 +289,12 @@
 </div>
 
 <script>
-  // !! IMPORTANT: Your Render server URL
   const RENDER_SERVER = 'https://frameai-server.onrender.com';
 
   let videoClips = [];
   let audioFile = null;
   let referenceVideo = null;
   let lastPlan = '';
-  let outputBlob = null;
 
   function switchTab(tab) {
     document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active',(i===0&&tab==='edit')||(i===1&&tab==='plan')));
@@ -310,84 +302,29 @@
     document.getElementById('tab-plan').classList.toggle('active',tab==='plan');
   }
 
-  // Upload file to Render server
-  async function uploadToRender(file, onProgress) {
-    return new Promise((resolve, reject) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${RENDER_SERVER}/upload`);
-      xhr.upload.onprogress = e => { if(e.lengthComputable) onProgress(Math.round(e.loaded/e.total*100)); };
-      xhr.onload = () => {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          if (xhr.status === 200) resolve(data);
-          else reject(new Error(data.error || 'Upload failed'));
-        } catch(e) { reject(new Error('Upload failed')); }
-      };
-      xhr.onerror = () => reject(new Error('Network error — server may be waking up, try again in 30 seconds'));
-      xhr.send(formData);
-    });
-  }
-
-  async function handleVideoFiles(files) {
-    Array.from(files).forEach(async f => {
+  function handleVideoFiles(files) {
+    Array.from(files).forEach(f => {
       const id = Date.now() + '-' + Math.random().toString(36).slice(2);
-      const localUrl = URL.createObjectURL(f);
-      const clip = { id, name: f.name, size: (f.size/1024/1024).toFixed(1)+' MB', url: localUrl, filename: null, status: 'uploading', progress: 0, file: f };
-      videoClips.push(clip);
-      renderAssets();
-      addTimelineClip(clip);
-      document.getElementById('empty-msg').style.display = 'none';
-
-      try {
-        document.getElementById('proc-title').textContent = 'Uploading ' + f.name + '...';
-        document.getElementById('proc-sub').textContent = 'Server may take 30-60s to wake up on first upload';
-        document.getElementById('prog-fill').style.width = '0%';
-        document.getElementById('proc-overlay').classList.add('active');
-
-        const result = await uploadToRender(f, p => {
-          clip.progress = p;
-          updateClipProgress(clip.id, p);
-          document.getElementById('prog-fill').style.width = p + '%';
-        });
-
-        clip.filename = result.filename;
-        clip.status = 'done';
-        updateClipStatus(clip.id, 'done');
-        document.getElementById('proc-overlay').classList.remove('active');
-
-      } catch(e) {
-        clip.status = 'error';
-        updateClipStatus(clip.id, 'error');
-        document.getElementById('proc-overlay').classList.remove('active');
-        showError('Upload failed: ' + e.message);
-      }
+      const url = URL.createObjectURL(f);
+      videoClips.push({ id, name: f.name, size: (f.size/1024/1024).toFixed(1)+' MB', url, file: f, status: 'done' });
+      addTimelineClip({ id, name: f.name });
     });
+    renderAssets();
+    document.getElementById('empty-msg').style.display = 'none';
   }
 
-  async function handleReferenceFile(f) {
+  function handleReferenceFile(f) {
     if (!f) return;
-    const s = document.getElementById('ref-status');
-    s.textContent = '⏳ Uploading...';
-    try {
-      const result = await uploadToRender(f, p => s.textContent = `⏳ ${p}%`);
-      referenceVideo = { filename: result.filename, name: f.name };
-      s.textContent = '✅ ' + f.name;
-      s.style.color = '#9B59B6';
-    } catch(e) { s.textContent = '❌ ' + e.message; }
+    referenceVideo = { file: f, name: f.name };
+    document.getElementById('ref-status').textContent = '✅ ' + f.name;
+    document.getElementById('ref-status').style.color = '#9B59B6';
   }
 
-  async function handleAudioFile(f) {
+  function handleAudioFile(f) {
     if (!f) return;
-    const s = document.getElementById('audio-status');
-    s.textContent = '⏳ Uploading audio...';
-    try {
-      const result = await uploadToRender(f, p => s.textContent = `⏳ ${p}%`);
-      audioFile = { filename: result.filename, name: f.name };
-      s.textContent = '✅ ' + f.name;
-      s.style.color = 'var(--success)';
-    } catch(e) { s.textContent = '❌ ' + e.message; }
+    audioFile = { file: f, name: f.name };
+    document.getElementById('audio-status').textContent = '✅ ' + f.name;
+    document.getElementById('audio-status').style.color = 'var(--success)';
   }
 
   function renderAssets() {
@@ -395,13 +332,11 @@
     list.querySelectorAll('.asset-item').forEach(e => e.remove());
     videoClips.forEach(c => {
       const div = document.createElement('div');
-      div.className = 'asset-item' + (c.status==='done'?' done':c.status==='uploading'?' uploading':'');
-      div.id = 'asset-' + c.id;
+      div.className = 'asset-item done';
       div.innerHTML = `<div class="asset-thumb">🎞</div>
         <div class="asset-info">
           <div class="asset-name" title="${c.name}">${c.name}</div>
-          <div class="asset-meta">${c.size} · <span id="status-${c.id}">${c.status==='done'?'✅ Ready':c.status==='uploading'?'⏳ Uploading...':'❌ Error'}</span></div>
-          ${c.status==='uploading'?`<div class="upload-progress"><div class="upload-progress-fill" id="prog-${c.id}" style="width:0%"></div></div>`:''}
+          <div class="asset-meta">${c.size} · ✅ Ready</div>
         </div>
         <span class="asset-remove" onclick="removeClip('${c.id}')">✕</span>`;
       div.addEventListener('click', () => {
@@ -413,49 +348,49 @@
     });
   }
 
-  function updateClipProgress(id, p) {
-    const el = document.getElementById('prog-' + id); if(el) el.style.width = p + '%';
-    const tp = document.querySelector(`.timeline-clip[data-id="${id}"] .timeline-clip-progress`); if(tp) tp.style.width = p + '%';
-  }
-
-  function updateClipStatus(id, status) {
-    const el = document.getElementById('status-' + id); if(el) el.textContent = status==='done'?'✅ Ready':'❌ Error';
-    const item = document.getElementById('asset-' + id); if(item){item.classList.remove('uploading');if(status==='done')item.classList.add('done');}
-    const clip = document.querySelector(`.timeline-clip[data-id="${id}"]`); if(clip){clip.classList.remove('uploading');if(status==='done')clip.classList.add('done');}
-  }
-
   function removeClip(id) {
     videoClips = videoClips.filter(c => c.id !== id);
-    const clip = document.querySelector(`.timeline-clip[data-id="${id}"]`); if(clip) clip.remove();
+    const clip = document.querySelector(`.timeline-clip[data-id="${id}"]`);
+    if (clip) clip.remove();
     renderAssets();
-    if (!document.querySelectorAll('.timeline-clip').length) {
-      const e = document.createElement('span'); e.id='timeline-empty'; e.className='timeline-empty'; e.textContent='Upload videos to see clips';
-      document.getElementById('timeline').appendChild(e);
+    if (!videoClips.length) {
+      document.getElementById('empty-msg').style.display = '';
+      if (!document.getElementById('timeline-empty')) {
+        const e = document.createElement('span');
+        e.id = 'timeline-empty'; e.className = 'timeline-empty';
+        e.textContent = 'Upload videos to see clips';
+        document.getElementById('timeline').appendChild(e);
+      }
     }
   }
 
   function addTimelineClip(clip) {
     const tl = document.getElementById('timeline');
-    const empty = document.getElementById('timeline-empty'); if(empty) empty.remove();
+    const empty = document.getElementById('timeline-empty');
+    if (empty) empty.remove();
     const div = document.createElement('div');
-    div.className = 'timeline-clip uploading'; div.dataset.id = clip.id;
-    div.innerHTML = `<span>${clip.name.length>12?clip.name.slice(0,11)+'…':clip.name}</span><div class="timeline-clip-progress" style="width:0%"></div>`;
+    div.className = 'timeline-clip done';
+    div.dataset.id = clip.id;
+    div.textContent = clip.name.length > 12 ? clip.name.slice(0,11) + '…' : clip.name;
+    div.addEventListener('click', () => {
+      const c = videoClips.find(x => x.id === clip.id);
+      if (c) { const v = document.getElementById('preview-video'); v.src = c.url; v.style.display = 'block'; document.getElementById('preview-placeholder').style.display = 'none'; }
+    });
     tl.appendChild(div);
   }
 
   async function processVideo() {
-    const readyClips = videoClips.filter(c => c.status === 'done' && c.filename);
-    if (!readyClips.length) { showError('Please wait for all videos to finish uploading.'); return; }
-    if (videoClips.some(c => c.status === 'uploading')) { showError('Some videos are still uploading. Please wait.'); return; }
-
+    if (!videoClips.length) { showError('Please upload at least one video.'); return; }
     hideError();
-    document.getElementById('edit-btn').disabled = true;
+
+    const btn = document.getElementById('edit-btn');
+    btn.disabled = true;
     document.getElementById('proc-overlay').classList.add('active');
 
     const steps = [
-      ['Waking up server...', 'FFmpeg server starting (30-60s first time)', 15],
-      ['Processing videos...', 'Merging your clips with FFmpeg', 40],
-      ['Applying effects...', 'Adding text, speed, audio', 65],
+      ['Waking up server...', 'First request may take 30-60 seconds', 10],
+      ['Uploading videos...', 'Sending files to FFmpeg server', 30],
+      ['Processing videos...', 'Merging and applying effects', 60],
       ['Encoding output...', 'Creating your MP4 file', 85],
       ['Almost done...', 'Finalizing video', 95],
     ];
@@ -466,35 +401,42 @@
       document.getElementById('proc-title').textContent = t;
       document.getElementById('proc-sub').textContent = s;
       document.getElementById('prog-fill').style.width = w + '%';
-    }, 8000);
+    }, 6000);
 
     try {
-      const clips = readyClips.map(c => c.filename);
+      const formData = new FormData();
+
+      // Add all video files
+      videoClips.forEach(c => formData.append('videos', c.file));
+
+      // Add audio if selected
+      const audioMode = document.getElementById('audio-mode').value;
+      if (audioMode === 'uploaded' && audioFile) {
+        formData.append('audio', audioFile.file);
+      }
+
+      // Add settings
       const settings = {
         speed: parseFloat(document.getElementById('speed-select').value),
         textOverlay: document.getElementById('text-overlay').value.trim(),
         textPosition: document.getElementById('text-position').value,
       };
-
-      const audioMode = document.getElementById('audio-mode').value;
-      const audioFilename = audioMode === 'uploaded' && audioFile ? audioFile.filename : null;
+      formData.append('settings', JSON.stringify(settings));
 
       const res = await fetch(`${RENDER_SERVER}/edit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clips, audioFilename, settings })
+        body: formData
       });
 
       clearInterval(interval);
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Processing failed');
+        let errMsg = 'Processing failed';
+        try { const e = await res.json(); errMsg = e.error || errMsg; } catch(e) {}
+        throw new Error(errMsg);
       }
 
-      // Get video blob
       const blob = await res.blob();
-      outputBlob = blob;
       const outputUrl = URL.createObjectURL(blob);
 
       document.getElementById('proc-overlay').classList.remove('active');
@@ -517,40 +459,50 @@
     } catch(err) {
       clearInterval(interval);
       document.getElementById('proc-overlay').classList.remove('active');
-      showError('Error: ' + err.message);
+      showError('Error: ' + err.message + (err.message.includes('fetch') ? ' — Server may be waking up, please try again in 30 seconds.' : ''));
     }
 
-    document.getElementById('edit-btn').disabled = false;
+    btn.disabled = false;
   }
 
-  function showError(msg){const b=document.getElementById('error-box');b.textContent=msg;b.style.display='block';}
-  function hideError(){document.getElementById('error-box').style.display='none';}
+  function showError(msg) { const b=document.getElementById('error-box'); b.textContent=msg; b.style.display='block'; }
+  function hideError() { document.getElementById('error-box').style.display='none'; }
 
   async function generatePlan() {
-    const prompt = document.getElementById('prompt-input').value.trim(); if(!prompt) return;
-    const btn = document.getElementById('gen-btn'); btn.disabled=true; btn.textContent='...';
-    document.getElementById('plan-error-box').style.display='none';
-    const assetDesc = videoClips.length?videoClips.map((c,i)=>`${i+1}. ${c.name} (${c.size})`).join('\n'):'(none)';
+    const prompt = document.getElementById('prompt-input').value.trim();
+    if (!prompt) return;
+    const btn = document.getElementById('gen-btn');
+    btn.disabled = true; btn.textContent = '...';
+    document.getElementById('plan-error-box').style.display = 'none';
+    const assetDesc = videoClips.length ? videoClips.map((c,i) => `${i+1}. ${c.name} (${c.size})`).join('\n') : '(none)';
     try {
-      const res = await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({assetDesc,prompt,hasReference:!!referenceVideo,referenceDesc:referenceVideo?.name||''})});
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetDesc, prompt, hasReference: !!referenceVideo, referenceDesc: referenceVideo?.name || '' })
+      });
       const data = await res.json();
-      if(!res.ok||data.error) throw new Error(data.error||'Server error');
-      lastPlan=data.result;
-      const box=document.getElementById('script-box');box.textContent=lastPlan;box.style.display='block';
-      document.getElementById('plan-actions').style.display='flex';
-    } catch(e){const eb=document.getElementById('plan-error-box');eb.textContent='Error: '+e.message;eb.style.display='block';}
-    btn.disabled=false;btn.textContent='✦ Generate';
+      if (!res.ok || data.error) throw new Error(data.error || 'Server error');
+      lastPlan = data.result;
+      const box = document.getElementById('script-box');
+      box.textContent = lastPlan; box.style.display = 'block';
+      document.getElementById('plan-actions').style.display = 'flex';
+    } catch(e) {
+      const eb = document.getElementById('plan-error-box');
+      eb.textContent = 'Error: ' + e.message; eb.style.display = 'block';
+    }
+    btn.disabled = false; btn.textContent = '✦ Generate';
   }
 
-  function fillPrompt(el){document.getElementById('prompt-input').value=el.textContent;document.getElementById('prompt-input').focus();}
-  function copyPlan(){navigator.clipboard.writeText(lastPlan).then(()=>{const b=event.target;const o=b.textContent;b.textContent='Copied!';setTimeout(()=>b.textContent=o,1500);});}
-  function downloadPlan(){const blob=new Blob([lastPlan],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='frameai-plan.txt';a.click();}
-  function clearPlan(){document.getElementById('script-box').style.display='none';document.getElementById('script-box').textContent='';document.getElementById('plan-actions').style.display='none';lastPlan='';}
+  function fillPrompt(el) { document.getElementById('prompt-input').value = el.textContent; document.getElementById('prompt-input').focus(); }
+  function copyPlan() { navigator.clipboard.writeText(lastPlan).then(() => { const b=event.target; const o=b.textContent; b.textContent='Copied!'; setTimeout(()=>b.textContent=o,1500); }); }
+  function downloadPlan() { const blob=new Blob([lastPlan],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='frameai-plan.txt'; a.click(); }
+  function clearPlan() { document.getElementById('script-box').style.display='none'; document.getElementById('script-box').textContent=''; document.getElementById('plan-actions').style.display='none'; lastPlan=''; }
 
-  const zone=document.getElementById('upload-zone');
-  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag-over');});
-  zone.addEventListener('dragleave',()=>zone.classList.remove('drag-over'));
-  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag-over');if(e.dataTransfer.files.length)handleVideoFiles(e.dataTransfer.files);});
+  const zone = document.getElementById('upload-zone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); if(e.dataTransfer.files.length) handleVideoFiles(e.dataTransfer.files); });
 </script>
 </body>
 </html>
